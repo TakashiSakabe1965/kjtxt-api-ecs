@@ -1,2 +1,2 @@
 trigger update
-workflow test 6
+workflow test 7
