@@ -1,0 +1,53 @@
+
+name: Deploy to ECS
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: arn:aws:iam::854878589422:role/aisin-subroutine-ecs-role
+        aws-region: ap-northeast-1
+        audience: sts.amazonaws.com
+
+    - name: Deploy ECS via CloudFormation
+      run: |
+        echo "📦 Deploying CloudFormation stack..."
+        aws cloudformation deploy \
+          --template-file infra/deploy-cfn.yml \
+          --stack-name kjtxt-ecs-stack \
+          --capabilities CAPABILITY_NAMED_IAM \
+          --region ap-northeast-1
+
+    - name: Wait for stack to complete
+      run: |
+        echo "⏳ Waiting for CloudFormation stack to complete..."
+        aws cloudformation wait stack-create-complete \
+          --stack-name kjtxt-ecs-stack \
+          --region ap-northeast-1
+
+    - name: Update ECS Service
+      run: |
+        echo "🚀 Deploying to ECS..."
+        aws ecs update-service \
+          --cluster kjtxt-cluster \
+          --service kjtxt-service \
+          --force-new-deployment \
+          --region ap-northeast-1
+# 2025.08.21
+

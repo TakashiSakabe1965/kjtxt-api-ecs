@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Fargate Service for kjtxt-api
+
+Parameters:
+  ClusterName:
+    Type: String
+    Description: ECS Cluster Name
+  ServiceName:
+    Type: String
+    Default: kjtxt-service
+    Description: ECS Service Name
+  TaskFamily:
+    Type: String
+    Default: kjtxt-api-task
+    Description: ECS Task Definition Family
+  ContainerName:
+    Type: String
+    Default: kjtxt-api
+    Description: Container Name
+  ContainerImage:
+    Type: String
+    Description: ECR Image URI
+  ContainerPort:
+    Type: Number
+    Default: 8080
+    Description: Port the container listens on
+  Cpu:
+    Type: String
+    Default: '512'
+    Description: CPU units for the task
+  Memory:
+    Type: String
+    Default: '1024'
+    Description: Memory (MiB) for the task
+  ExecutionRoleArn:
+    Type: String
+    Description: IAM Role ARN for ECS Task Execution
+  SubnetIds:
+    Type: List<String>
+    Default:
+      - subnet-0a1b2c3d4e5f6a7b8
+      - subnet-1a2b3c4d5e6f7a8b9
+    Description: List of subnet IDs
+  SecurityGroupIds:
+    Type: List<String>
+    Default:
+      - sg-0123abcd4567efgh8
+      - sg-1234bcde5678fgha9
+    Description: List of security group IDs
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: Number of tasks to run
+
+Resources:
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref TaskFamily
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !Ref ExecutionRoleArn
+      ContainerDefinitions:
+        - Name: !Ref ContainerName
+          Image: !Ref ContainerImage
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+
+  ECSService:
+    Type: AWS::ECS::Service
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      Cluster: !Ref ClusterName
+      ServiceName: !Ref ServiceName
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: !Ref DesiredCount
+      EnableExecuteCommand: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups: !Ref SecurityGroupIds
