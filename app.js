@@ -26,53 +26,40 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// 全件取得API（DynamoDBから全レコードを取得し、skj→jkjの順で返す）
-app.get('/kjtxts', async (req, res) => {
-    try {
-        const command = new ScanCommand({ TableName: tableName });
-        const data = await dynamodb.send(command);
-
-        if (!data.Items || data.Items.length === 0) {
-            // レコードが存在しない場合は404を返す
-            res.status(404).json("record not found");
-        } else {
-            // 必要な項目のみ抽出して返却
-            const orderedItems = data.Items.map(item => ({
-                skj: item.skj,
-                jkj: item.jkj
-            }));
-            res.status(200).json(orderedItems);
-        }
-    } catch (err) {
-        // エラー発生時は500を返す
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ID指定取得API（skjをクエリパラメータで受け取り、jkjのみ返す）
+// 統合された取得API（skjが指定されていれば1件取得、なければ全件取得）
 app.get('/kjtxt', async (req, res) => {
     const skj = req.query.skj;
-    if (!skj) {
-        // skjパラメータが不足している場合は400を返す
-        return res.status(400).json({ error: "Missing 'skj' parameter" });
-    }
 
     try {
-        const command = new GetCommand({
-            TableName: tableName,
-            Key: { skj }
-        });
-        const data = await dynamodb.send(command);
+        if (!skj) {
+            // skjが指定されていない場合は全件取得
+            const command = new ScanCommand({ TableName: tableName });
+            const data = await dynamodb.send(command);
 
-        if (data.Item && data.Item.jkj !== undefined) {
-            // 該当レコードが存在する場合はjkjを返す
-            res.status(200).json({ jkj: data.Item.jkj });
+            if (!data.Items || data.Items.length === 0) {
+                res.status(404).json("record not found");
+            } else {
+                const orderedItems = data.Items.map(item => ({
+                    skj: item.skj,
+                    jkj: item.jkj
+                }));
+                res.status(200).json(orderedItems);
+            }
         } else {
-            // レコードが存在しない場合は404を返す
-            res.status(404).json("record not found");
+            // skjが指定されている場合は1件取得
+            const command = new GetCommand({
+                TableName: tableName,
+                Key: { skj }
+            });
+            const data = await dynamodb.send(command);
+
+            if (data.Item && data.Item.jkj !== undefined) {
+                res.status(200).json({ jkj: data.Item.jkj });
+            } else {
+                res.status(404).json("record not found");
+            }
         }
     } catch (err) {
-        // エラー発生時は500を返す
         res.status(500).json({ error: err.message });
     }
 });
