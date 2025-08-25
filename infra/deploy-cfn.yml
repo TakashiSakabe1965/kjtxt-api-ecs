@@ -104,6 +104,12 @@ Resources:
         - Key: Name
           Value: kjtxt-ecs-sg
 
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/kjtxt-api
+      RetentionInDays: 14
+
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -121,7 +127,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-      RoleName: kjtxt-task-execution-role
+      RoleName: !Sub kjtxt-task-execution-role-${AWS::StackName}
 
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -210,3 +216,11 @@ Outputs:
   LoadBalancerDNS:
     Description: DNS name of the ALB
     Value: !GetAtt LoadBalancer.DNSName
+
+  ClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+
+  ServiceName:
+    Description: ECS Service Name
+    Value: !Ref ECSService
