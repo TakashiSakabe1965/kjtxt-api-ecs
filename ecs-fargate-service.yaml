@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: ECS Fargate Service for kjtxt-api
+Description: ECS Fargate Service for kjtxt-api with ALB integration
 
 Parameters:
   ClusterName:
@@ -37,20 +37,17 @@ Parameters:
     Description: IAM Role ARN for ECS Task Execution
   SubnetIds:
     Type: List<String>
-    Default:
-      - subnet-0a1b2c3d4e5f6a7b8
-      - subnet-1a2b3c4d5e6f7a8b9
     Description: List of subnet IDs
   SecurityGroupIds:
     Type: List<String>
-    Default:
-      - sg-0123abcd4567efgh8
-      - sg-1234bcde5678fgha9
     Description: List of security group IDs
   DesiredCount:
     Type: Number
     Default: 1
     Description: Number of tasks to run
+  TargetGroupArn:
+    Type: String
+    Description: ARN of the ALB Target Group
 
 Resources:
   TaskDefinition:
@@ -68,11 +65,16 @@ Resources:
           Image: !Ref ContainerImage
           PortMappings:
             - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/kjtxt-api
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: ecs
 
   ECSService:
     Type: AWS::ECS::Service
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
     Properties:
       Cluster: !Ref ClusterName
       ServiceName: !Ref ServiceName
@@ -85,3 +87,7 @@ Resources:
           AssignPublicIp: ENABLED
           Subnets: !Ref SubnetIds
           SecurityGroups: !Ref SecurityGroupIds
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroupArn
+          ContainerName: !Ref ContainerName
+          ContainerPort: !Ref ContainerPort
