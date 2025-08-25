@@ -1,4 +1,3 @@
-
 name: Deploy to ECS
 
 on:
@@ -24,6 +23,23 @@ jobs:
         role-to-assume: arn:aws:iam::854878589422:role/aisin-subroutine-ecs-role
         aws-region: ap-northeast-1
         audience: sts.amazonaws.com
+
+    - name: Build Docker image
+      run: |
+        docker build -t kjtxt-api:latest .
+
+    - name: Tag Docker image for ECR
+      run: |
+        docker tag kjtxt-api:latest 854878589422.dkr.ecr.ap-northeast-1.amazonaws.com/kjtxt-api:latest
+
+    - name: Login to Amazon ECR
+      run: |
+        aws ecr get-login-password --region ap-northeast-1 | \
+        docker login --username AWS --password-stdin 854878589422.dkr.ecr.ap-northeast-1.amazonaws.com
+
+    - name: Push Docker image to ECR
+      run: |
+        docker push 854878589422.dkr.ecr.ap-northeast-1.amazonaws.com/kjtxt-api:latest
 
     - name: 📦 Deploy CloudFormation stack
       run: |
@@ -58,6 +74,7 @@ jobs:
           --output text)
         echo "ECS Cluster Name: $CLUSTER_NAME"
         echo "cluster-name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+
     - name: 🚀 Deploy to ECS
       run: |
         echo "🚀 Updating ECS service..."
