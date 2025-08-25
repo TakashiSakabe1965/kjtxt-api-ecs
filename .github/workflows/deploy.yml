@@ -1,3 +1,4 @@
+
 name: Deploy to ECS
 
 on:
@@ -24,17 +25,44 @@ jobs:
         aws-region: ap-northeast-1
         audience: sts.amazonaws.com
 
-    - name: Deploy ECS via CloudFormation
+    - name: 📦 Deploy CloudFormation stack
       run: |
         echo "📦 Deploying CloudFormation stack..."
-        aws cloudformation deploy           --template-file infra/deploy-cfn.yml           --stack-name kjtxt-ecs-stack           --capabilities CAPABILITY_NAMED_IAM           --region ap-northeast-1           --no-fail-on-empty-changeset           --parameter-overrides             VpcId=vpc-00a864232967b482e             Subnet1=subnet-08575605bc6e74371             Subnet2=subnet-0bd83c19cd2d031f4             ALBSecurityGroupId=sg-07c55a885728e21e8             ECSSecurityGroupId=sg-0f0f53729b7673f03
+        aws cloudformation deploy \
+          --template-file infra/deploy-cfn.yml \
+          --stack-name kjtxt-ecs-stack-v2 \
+          --capabilities CAPABILITY_NAMED_IAM \
+          --region ap-northeast-1 \
+          --no-fail-on-empty-changeset \
+          --parameter-overrides \
+            VpcId=vpc-00a864232967b482e \
+            Subnet1=subnet-08575605bc6e74371 \
+            Subnet2=subnet-0bd83c19cd2d031f4 \
+            ALBSecurityGroupId=sg-07c55a885728e21e8 \
+            ECSSecurityGroupId=sg-0f0f53729b7673f03
 
-    - name: Wait for stack to complete
+    - name: ⏳ Wait for CloudFormation stack to complete
       run: |
         echo "⏳ Waiting for CloudFormation stack to complete..."
-        aws cloudformation wait stack-create-complete           --stack-name kjtxt-ecs-stack           --region ap-northeast-1
+        aws cloudformation wait stack-create-complete \
+          --stack-name kjtxt-ecs-stack-v2 \
+          --region ap-northeast-1
 
-    - name: Update ECS Service
+    - name: 🔍 Get ECS Cluster Name from CloudFormation Outputs
+      id: get_cluster
       run: |
-        echo "🚀 Deploying to ECS..."
-        aws ecs update-service           --cluster kjtxt-ecs-stack-ECSCluster-XXXXXXXX           --service kjtxt-service           --force-new-deployment           --region ap-northeast-1
+        CLUSTER_NAME=$(aws cloudformation describe-stacks \
+          --stack-name kjtxt-ecs-stack-v2 \
+          --region ap-northeast-1 \
+          --query "Stacks[0].Outputs[?OutputKey=='ECSClusterName'].OutputValue" \
+          --output text)
+        echo "ECS Cluster Name: $CLUSTER_NAME"
+        echo "cluster-name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+    - name: 🚀 Deploy to ECS
+      run: |
+        echo "🚀 Updating ECS service..."
+        aws ecs update-service \
+          --cluster ${{ steps.get_cluster.outputs.cluster-name }} \
+          --service kjtxt-service \
+          --force-new-deployment \
+          --region ap-northeast-1

@@ -1,3 +1,4 @@
+
 AWSTemplateFormatVersion: '2010-09-09'
 Description: ECS Fargate Stack with ALB, IAM, and ECS Resources (VPC/Subnet/SG are external)
 
@@ -21,7 +22,6 @@ Parameters:
   ECSSecurityGroupId:
     Type: String
     Description: Security Group ID for ECS tasks
-
 Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
@@ -126,8 +126,11 @@ Resources:
         - TargetGroupArn: !Ref TargetGroup
           ContainerName: kjtxt-api
           ContainerPort: 8080
-
 Outputs:
   LoadBalancerDNS:
     Description: DNS name of the ALB
     Value: !GetAtt LoadBalancer.DNSName
+
+  ECSClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
