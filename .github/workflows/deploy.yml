@@ -36,7 +36,6 @@ jobs:
       run: |
         aws ecr get-login-password --region ap-northeast-1 | \
         docker login --username AWS --password-stdin 854878589422.dkr.ecr.ap-northeast-1.amazonaws.com
-
     - name: Push Docker image to ECR
       run: |
         docker push 854878589422.dkr.ecr.ap-northeast-1.amazonaws.com/kjtxt-api:latest
@@ -56,7 +55,6 @@ jobs:
             Subnet2=subnet-0bd83c19cd2d031f4 \
             ALBSecurityGroupId=sg-07c55a885728e21e8 \
             ECSSecurityGroupId=sg-0f0f53729b7673f03
-
     - name: ⏳ Wait for CloudFormation stack to complete
       run: |
         echo "⏳ Waiting for CloudFormation stack to complete..."
@@ -72,14 +70,32 @@ jobs:
           --region ap-northeast-1 \
           --query "Stacks[0].Outputs[?OutputKey=='ECSClusterName'].OutputValue" \
           --output text)
-        echo "ECS Cluster Name: $CLUSTER_NAME"
         echo "cluster-name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
 
-    - name: 🚀 Deploy to ECS
+    - name: 🔧 Register new task definition with updated image
+      id: register_task
       run: |
-        echo "🚀 Updating ECS service..."
+        echo "🔧 Registering new task definition..."
+        TASK_DEF=$(aws ecs describe-task-definition \
+          --task-definition kjtxt-task \
+          --region ap-northeast-1)
+
+        NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "854878589422.dkr.ecr.ap-northeast-1.amazonaws.com/kjtxt-api:latest" '
+          .taskDefinition |
+          del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) |
+          .containerDefinitions[0].image = $IMAGE')
+
+        echo "$NEW_TASK_DEF" > new-task-def.json
+
+        aws ecs register-task-definition \
+          --cli-input-json file://new-task-def.json \
+          --region ap-northeast-1
+    - name: 🚀 Deploy to ECS with new task definition
+      run: |
+        echo "🚀 Updating ECS service with new task definition..."
         aws ecs update-service \
           --cluster ${{ steps.get_cluster.outputs.cluster-name }} \
           --service kjtxt-service \
+          --task-definition kjtxt-task \
           --force-new-deployment \
           --region ap-northeast-1
