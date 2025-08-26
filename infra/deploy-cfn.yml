@@ -1,37 +1,45 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Description: ECS Fargate Stack with ALB, IAM, and ECS Resources (VPC/Subnet/SG are external)
 
+# -----------------------------
+# パラメータ定義（外部VPC/サブネット/SGを利用）
+# -----------------------------
 Parameters:
   VpcId:
     Type: String
-    Description: Existing VPC ID
+    Description: 既存のVPC ID
 
   Subnet1:
     Type: String
-    Description: Public Subnet 1 ID
+    Description: パブリックサブネット1のID
 
   Subnet2:
     Type: String
-    Description: Public Subnet 2 ID
+    Description: パブリックサブネット2のID
 
   ALBSecurityGroupId:
     Type: String
-    Description: Security Group ID for ALB
+    Description: ALB用のセキュリティグループID
 
   ECSSecurityGroupId:
     Type: String
-    Description: Security Group ID for ECS tasks
+    Description: ECSタスク用のセキュリティグループID
+
+# -----------------------------
+# リソース定義
+# -----------------------------
 Resources:
+  # CloudWatch Logs用のロググループ
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /ecs/kjtxt-api
       RetentionInDays: 14
 
+  # ECSクラスター
   ECSCluster:
     Type: AWS::ECS::Cluster
-
+  # タスク実行ロール（イメージ取得やログ出力用）
   TaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -44,8 +52,33 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+  # アプリケーションがDynamoDBにアクセスするためのタスクロール
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-task-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource: "*"  # 必要に応じてDynamoDBテーブルARNに限定可能
 
+  # ECSタスク定義（Fargate用）
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -55,7 +88,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn  # イメージ取得・ログ出力用
+      TaskRoleArn: !GetAtt TaskRole.Arn                # アプリケーションのDynamoDBアクセス用
       ContainerDefinitions:
         - Name: kjtxt-api
           Image: 854878589422.dkr.ecr.ap-northeast-1.amazonaws.com/kjtxt-api:latest
@@ -69,6 +103,7 @@ Resources:
               awslogs-region: ap-northeast-1
               awslogs-stream-prefix: ecs
 
+  # ALBのターゲットグループ（ECSタスクを登録）
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -79,6 +114,7 @@ Resources:
       HealthCheckPath: /health
       HealthCheckPort: traffic-port
 
+  # アプリケーションロードバランサー（ALB）
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -91,6 +127,7 @@ Resources:
       Type: application
       IpAddressType: ipv4
 
+  # ALBのリスナー（HTTP:80 → ターゲットグループへ転送）
   Listener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -101,6 +138,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
 
+  # ECSサービス（Fargateでタスクを起動し、ALBに登録）
   ECSService:
     Type: AWS::ECS::Service
     DependsOn:
@@ -126,6 +164,10 @@ Resources:
         - TargetGroupArn: !Ref TargetGroup
           ContainerName: kjtxt-api
           ContainerPort: 8080
+
+# -----------------------------
+# 出力情報（ALBのDNS名など）
+# -----------------------------
 Outputs:
   LoadBalancerDNS:
     Description: DNS name of the ALB
